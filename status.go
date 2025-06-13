@@ -30,6 +30,7 @@ const (
 	StatUNK     = iota // unknown status (init)
 	StatOK             // processing active
 	StatDEV            // device failure
+	StatNS             // namespace construction failed
 	StatSRV            // can't serve namespace
 	StatIP             // invalid IP address
 	StatWIFI           // can't connect to AP

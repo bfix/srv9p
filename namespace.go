@@ -46,6 +46,19 @@ type File interface {
 	Write([]byte) error
 }
 
+// NopFile ignores all read/write requests
+type NopFile struct{}
+
+// Read returns emtpy file
+func (f *NopFile) Read() (data []byte, err error) {
+	return
+}
+
+// Write to file is ignored
+func (f *NopFile) Write([]byte) (err error) {
+	return
+}
+
 //----------------------------------------------------------------------
 
 // Entry in the filesystem
@@ -60,19 +73,48 @@ func (e *Entry) IsDir() bool {
 	return e.children != nil
 }
 
-// NewFile creates a file entry for the filesystem.
-func NewFile(name, user, group string, perm uint32, impl File) *Entry {
-	return newEntry(name, user, group, perm, impl)
+// SetOwner of entry if different from namespace owner
+func (e *Entry) SetOwner(user, group string) {
+	e.ref.Uid = user
+	e.ref.Gid = group
 }
 
-// NewDir creates a directory entry for the filesystem.
-func NewDir(name, user, group string, perm uint32) *Entry {
-	return newEntry(name, user, group, perm, nil)
+//----------------------------------------------------------------------
+
+// Namespace is a synthetic filesystem.
+type Namespace struct {
+	ninep.NopFS                   // use default handlers where needed
+	user        string            // namespace owner
+	group       string            // owner group
+	dict        map[uint64]*Entry // map Qid.Path to filesystem entry
+	nextID      uint64            // identifier for an entry
+}
+
+// NewNamespace creates a new filesystem (with root directory) for the given
+// user and group. All subdirectories and files belong to the same owner and
+// group. If required, the ownership can be redefined on an entry with the
+// SetOwner() method of an entry.
+func NewNamespace(user, group string) *Namespace {
+	ns := &Namespace{
+		dict:  make(map[uint64]*Entry),
+		user:  user,
+		group: group,
+	}
+	e := ns.newEntry("/", user, group, 0555, nil)
+	ns.dict[e.ref.Path] = e
+	return ns
+}
+
+// get next identifier for an entry.
+func (ns *Namespace) newId() uint64 {
+	id := ns.nextID
+	ns.nextID++
+	return id
 }
 
 // Create a new entry in the filesystem.
 // If impl is nil, the entry represents a directory; otherwise a file.
-func newEntry(name, user, group string, perm uint32, impl File) *Entry {
+func (ns *Namespace) newEntry(name, user, group string, perm uint32, impl File) *Entry {
 	e := new(Entry)
 	kind := ninep.QTFile
 	if impl == nil {
@@ -84,7 +126,7 @@ func newEntry(name, user, group string, perm uint32, impl File) *Entry {
 	}
 	e.ref = &ninep.Dir{
 		Qid: ninep.Qid{
-			Path: newId(),
+			Path: ns.newId(),
 			Vers: 0,
 			Type: byte(kind),
 		},
@@ -97,45 +139,12 @@ func newEntry(name, user, group string, perm uint32, impl File) *Entry {
 	return e
 }
 
-// next possible identifier (Qid.Path) for an entry in the filesystem.
-var nextId uint64 = 0
-
-// get next identifier for an entry.
-func newId() uint64 {
-	id := nextId
-	nextId++
-	return id
-}
-
-//----------------------------------------------------------------------
-
-// Namespace is a synthetic file system.
-type Namespace struct {
-	ninep.NopFS                   // use default handlers where needed
-	dict        map[uint64]*Entry // map Qid.Path to filesystem entry
-}
-
-// NewNamespace creates a new filesystem (with root directory) for the given
-// user/group with the specified permissions.
-func NewNamespace(user, group string, perm uint32) *Namespace {
-	ns := new(Namespace)
-	ns.dict = make(map[uint64]*Entry)
-	e := NewDir("/", user, group, perm)
-	ns.dict[e.ref.Path] = e
-	return ns
-}
-
-// Root returns the entry of the root directory
-func (ns *Namespace) Root() *Entry {
-	return ns.dict[0]
-}
-
 // Get entry with given path
 func (ns *Namespace) Get(path string) (*Entry, error) {
 	if path[0] != '/' {
 		return nil, errNoAbs
 	}
-	curr := ns.Root()
+	curr := ns.dict[0]
 	for _, label := range strings.Split(path[1:], "/") {
 		if len(label) == 0 {
 			continue
@@ -153,13 +162,40 @@ func (ns *Namespace) Get(path string) (*Entry, error) {
 	return curr, nil
 }
 
-// AddChild to parent entry. Parent must be a directory.
-func (ns *Namespace) AddChild(parent, child *Entry) error {
+func (ns *Namespace) NewFile(path string, perm uint32, impl File) (err error) {
+	if path[0] != '/' {
+		return errNoAbs
+	}
+	path = strings.TrimRight(path, "/")
+	idx := strings.LastIndex(path, "/")
+	return ns.new(path[:idx-1], ns.newEntry(path[idx+1:], ns.user, ns.group, perm, impl))
+}
+
+// NewDir creates a directory entry for the filesystem.
+func (ns *Namespace) NewDir(path string, perm uint32) (err error) {
+	if path[0] != '/' {
+		return errNoAbs
+	}
+	path = strings.TrimRight(path, "/")
+	idx := strings.LastIndex(path, "/")
+	return ns.new(path[:idx-1], ns.newEntry(path[idx+1:], ns.user, ns.group, perm, nil))
+}
+
+// New inserts an entry at a given directory path.
+func (ns *Namespace) new(path string, entry *Entry) (err error) {
+	var parent *Entry
+	if parent, err = ns.Get(path); err != nil {
+		return
+	}
+	if !parent.IsDir() {
+		err = errNoDir
+		return
+	}
 	if parent.children == nil {
 		return errNoDir
 	}
-	parent.children[child.ref.Name] = child
-	ns.dict[child.ref.Path] = child
+	parent.children[entry.ref.Name] = entry
+	ns.dict[entry.ref.Path] = entry
 	return nil
 }
 

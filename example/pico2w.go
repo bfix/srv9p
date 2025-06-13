@@ -21,7 +21,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -31,46 +30,6 @@ import (
 	"git.sr.ht/~moody/ninep"
 	"github.com/bfix/srv9p"
 )
-
-// StaticFile with static content.
-type StaticFile struct {
-	content []byte
-}
-
-// NewStaticFile with given content.
-func NewStaticFile(content string) *StaticFile {
-	return &StaticFile{
-		content: []byte(content),
-	}
-}
-
-// Read implementation: return the file content.
-func (f *StaticFile) Read() ([]byte, error) {
-	return f.content, nil
-}
-
-// Write implementation: we are read only, so return an error
-func (f *StaticFile) Write(data []byte) error {
-	return errors.New("write prohibited")
-}
-
-//----------------------------------------------------------------------
-
-// DynamicFile with volatile content.
-type DynamicFile struct{}
-
-// Read implementation: return the file content.
-func (f *DynamicFile) Read() ([]byte, error) {
-	s := fmt.Sprintf("%f\n", rand.Float32())
-	return []byte(s), nil
-}
-
-// Write implementation: we are read only, so return an error
-func (f *DynamicFile) Write(data []byte) error {
-	return errors.New("write prohibited")
-}
-
-//----------------------------------------------------------------------
 
 // WiFi credentials and 9p port
 // Variables can be set at compile time by adding
@@ -92,26 +51,29 @@ func main() {
 	dev := srv9p.InitDevice()
 	state := srv9p.NewStatus(dev)
 	defer func() {
+		s, _ := state.Get()
 		if r := recover(); r != nil {
-			state.Set(srv9p.StatEXCP, 0)
-		} else {
-			if s, _ := state.Get(); s == srv9p.StatOK {
-				state.Set(srv9p.StatUNK, 0)
+			if s == srv9p.StatOK {
+				state.Set(srv9p.StatEXCP, 0)
 			}
+		} else if s == srv9p.StatOK {
+			state.Set(srv9p.StatUNK, 0)
 		}
-		time.Sleep(30 * time.Second)
+		time.Sleep(24 * time.Hour)
 	}()
 	state.Set(srv9p.StatOK, 0)
 
 	// construct filesystem
-	fs := srv9p.NewNamespace("sys", "sys", 0777)
-	root := fs.Root()
-	sfile := NewStaticFile("Just a test...\n")
-	fs.AddChild(root, srv9p.NewFile("static", "sys", "sys", 0444, sfile))
-	dir := srv9p.NewDir("sensors", "sys", "sys", 0777)
-	fs.AddChild(root, dir)
-	dfile := new(DynamicFile)
-	fs.AddChild(dir, srv9p.NewFile("temp", "sys", "sys", 0444, dfile))
+	check := func(err error) {
+		if err != nil {
+			state.Set(srv9p.StatNS, 0)
+			panic(err)
+		}
+	}
+	fs := srv9p.NewNamespace("sys", "sys")
+	check(fs.NewFile("/readme", 0444, NewTextFile("Just a test...\n")))
+	check(fs.NewDir("/sensors", 0777))
+	check(fs.NewFile("/sensors/temp", 0444, new(DynamicFile)))
 
 	// connect to WiFi and listen to 9p connections
 	port, err := strconv.ParseInt(Port, 10, 16)
@@ -142,4 +104,39 @@ func main() {
 	// cat /n/test/static
 	// unmount /n/test
 	// rm /srv/test
+}
+
+//======================================================================
+// File implementations
+//======================================================================
+
+// TextFile with static text content.
+type TextFile struct {
+	srv9p.NopFile
+	body string
+}
+
+// NewTextFile with given text content.
+func NewTextFile(content string) *TextFile {
+	return &TextFile{
+		body: content,
+	}
+}
+
+// Read implementation: return the file content.
+func (f *TextFile) Read() ([]byte, error) {
+	return []byte(f.body), nil
+}
+
+//----------------------------------------------------------------------
+
+// DynamicFile with volatile content.
+type DynamicFile struct {
+	srv9p.NopFile
+}
+
+// Read implementation: return the file content.
+func (f *DynamicFile) Read() ([]byte, error) {
+	s := fmt.Sprintf("%f\n", rand.Float32())
+	return []byte(s), nil
 }
