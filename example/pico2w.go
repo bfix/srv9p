@@ -73,6 +73,11 @@ func (f *DynamicFile) Write(data []byte) error {
 //----------------------------------------------------------------------
 
 // WiFi credentials and 9p port
+// Variables can be set at compile time by adding
+//
+//	-ldflags "-X 'main.SSID=MyWiFi' -X 'main.Passwd=MySecret' -X 'main.Host=pico' -X 'main.Port=564'"
+//
+// to the build/install command.
 var (
 	SSID   string
 	Passwd string
@@ -115,7 +120,7 @@ func main() {
 	}
 	var lst net.Listener
 	var stat int
-	if lst, stat = srv9p.SetupListener(dev, Host, IP, SSID, Passwd, uint16(port)); stat != srv9p.StatOK {
+	if lst, stat = dev.SetupListener(Host, IP, SSID, Passwd, uint16(port)); stat != srv9p.StatOK {
 		state.Set(stat, 0)
 		return
 	}

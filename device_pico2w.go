@@ -58,18 +58,12 @@ func InitDevice() Device {
 // SetupListener returns a TCP listener on the given port.
 // Can connect to WiFi hotspot (if applicable) first.
 // If DHCP fails, a static IP can be used.
-func SetupListener(dev Device, host, ip, ssid, passwd string, port uint16) (lst net.Listener, state int) {
-	d, ok := dev.(*Pico2WDevice)
-	if !ok {
-		state = StatDEV
-		return
-	}
-
+func (dev *Pico2WDevice) SetupListener(host, ip, ssid, passwd string, port uint16) (lst net.Listener, state int) {
 	var logger *slog.Logger = slog.New(slog.NewTextHandler(machine.Serial, &slog.HandlerOptions{Level: slog.LevelDebug - 1}))
 	time.Sleep(2 * time.Second)
 
 	var stack *stacks.PortStack
-	if stack, state = SetupWithDHCP(d.ref, SetupConfig{
+	if stack, state = SetupWithDHCP(dev.ref, SetupConfig{
 		Hostname:    host,
 		RequestedIP: ip,
 		TCPPorts:    1,

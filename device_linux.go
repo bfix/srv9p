@@ -40,8 +40,7 @@ func InitDevice() (dev Device) {
 }
 
 // SetupListener returns a TCP listener on the given port.
-func SetupWiFiListener(dev Device, _, _, _, _ string, port uint16) (lst net.Listener, state int) {
-
+func (dev *LinuxDevice) SetupListener(_, _, _, _ string, port uint16) (lst net.Listener, state int) {
 	ctx := context.Background()
 	cfg := new(net.ListenConfig)
 	lis, err := cfg.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))

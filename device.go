@@ -20,8 +20,13 @@
 
 package srv9p
 
+import "net"
+
 // Device is a hardware abstraction
 type Device interface {
 	// LED on or off (if applicable)
 	LED(on bool)
+
+	// SetupListener returns a TCP listener on the given port.
+	SetupListener(_, _, _, _ string, port uint16) (lst net.Listener, state int)
 }
