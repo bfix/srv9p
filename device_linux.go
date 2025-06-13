@@ -45,7 +45,7 @@ func (dev *LinuxDevice) SetupListener(_, _, _, _ string, port uint16) (lst net.L
 	cfg := new(net.ListenConfig)
 	lis, err := cfg.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		return nil, statLISTEN1
+		return nil, StatLISTEN1
 	}
-	return lis, nil
+	return lis, StatOK
 }
