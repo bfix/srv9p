@@ -28,5 +28,13 @@ type Device interface {
 	LED(on bool)
 
 	// SetupListener returns a TCP listener on the given port.
-	SetupListener(_, _, _, _ string, port uint16) (lst net.Listener, state int)
+	// On embedded devices with WiFi connectivity the following steps are
+	// performed:
+	//    1. Connect to access point with given SSID and join with WPA2 password
+	//    2. Use DHCP to get a network address; query for given hostname. Assign
+	//       IP address if DHCP fails (if IP is a valid address).
+	//    3. Listen to the specified TCP port
+	// Devices with running TCP/IP stack can skip steps 1. and 2. in their
+	// implementation.
+	SetupListener(host, ip, ssid, passwd string, port uint16) (lst net.Listener, state int)
 }
