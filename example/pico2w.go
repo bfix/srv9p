@@ -22,7 +22,7 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"net"
 	"strconv"
 	"time"
@@ -47,20 +47,10 @@ var (
 
 // run 9p server
 func main() {
-	// access device
+	// prepare device
 	dev := srv9p.InitDevice()
 	state := srv9p.NewStatus(dev)
-	defer func() {
-		s, _ := state.Get()
-		if r := recover(); r != nil {
-			if s == srv9p.StatOK {
-				state.Set(srv9p.StatEXCP, 0)
-			}
-		} else if s == srv9p.StatOK {
-			state.Set(srv9p.StatUNK, 0)
-		}
-		time.Sleep(24 * time.Hour)
-	}()
+	defer state.Trap(24 * time.Hour)
 	state.Set(srv9p.StatOK, 0)
 
 	// construct filesystem
@@ -71,9 +61,14 @@ func main() {
 		}
 	}
 	fs := srv9p.NewNamespace("sys", "sys")
-	check(fs.NewFile("/readme", 0444, NewTextFile("Just a test...\n")))
+	check(fs.NewFile("/readme", 0444, srv9p.NewTextFile("Just a test...\n")))
 	check(fs.NewDir("/sensors", 0777))
-	check(fs.NewFile("/sensors/temp", 0444, new(DynamicFile)))
+	check(fs.NewFile("/sensors/temp", 0444, srv9p.NewFuncFile(
+		func() ([]byte, error) {
+			s := fmt.Sprintf("%f\n", rand.Float32())
+			return []byte(s), nil
+		},
+	)))
 
 	// connect to WiFi and listen to 9p connections
 	port, err := strconv.ParseInt(Port, 10, 16)
@@ -104,39 +99,4 @@ func main() {
 	// cat /n/test/static
 	// unmount /n/test
 	// rm /srv/test
-}
-
-//======================================================================
-// File implementations
-//======================================================================
-
-// TextFile with static text content.
-type TextFile struct {
-	srv9p.NopFile
-	body string
-}
-
-// NewTextFile with given text content.
-func NewTextFile(content string) *TextFile {
-	return &TextFile{
-		body: content,
-	}
-}
-
-// Read implementation: return the file content.
-func (f *TextFile) Read() ([]byte, error) {
-	return []byte(f.body), nil
-}
-
-//----------------------------------------------------------------------
-
-// DynamicFile with volatile content.
-type DynamicFile struct {
-	srv9p.NopFile
-}
-
-// Read implementation: return the file content.
-func (f *DynamicFile) Read() ([]byte, error) {
-	s := fmt.Sprintf("%f\n", rand.Float32())
-	return []byte(s), nil
 }

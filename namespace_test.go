@@ -1,5 +1,3 @@
-//go:build !rp2350
-
 //----------------------------------------------------------------------
 // This file is part of srv9p.
 // Copyright (C) 2024-present Bernd Fix   >Y<
@@ -23,29 +21,29 @@
 package srv9p
 
 import (
-	"context"
 	"fmt"
-	"net"
+	"math/rand/v2"
+	"testing"
 )
 
-// LinuxDevice (for testing purposes)
-type LinuxDevice struct{}
-
-// LED on or off (not applicable)
-func (dev *LinuxDevice) LED(on bool) {}
-
-// Initialize device
-func InitDevice() (dev Device) {
-	return new(LinuxDevice)
+// build a test namespace
+func newNamespace() (ns *Namespace, err error) {
+	ns = NewNamespace("sys", "sys")
+	if err = ns.NewFile("/readme", 0444, NewTextFile("Just a test...\n")); err != nil {
+		return
+	}
+	if err = ns.NewDir("/sensors", 0777); err != nil {
+		return
+	}
+	err = ns.NewFile("/sensors/temp", 0444, NewFuncFile(
+		func() ([]byte, error) {
+			s := fmt.Sprintf("%f\n", rand.Float32())
+			return []byte(s), nil
+		},
+	))
+	return
 }
 
-// SetupListener returns a TCP listener on the given port.
-func (dev *LinuxDevice) SetupListener(_, _, _, _ string, port uint16) (lst net.Listener, state int) {
-	ctx := context.Background()
-	cfg := new(net.ListenConfig)
-	lis, err := cfg.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		return nil, StatLISTEN1
-	}
-	return lis, StatOK
+func TestNamespaceNew(t *testing.T) {
+	newNamespace()
 }

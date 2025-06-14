@@ -37,30 +37,6 @@ var (
 
 //----------------------------------------------------------------------
 
-// File interface for file handler implementations:
-// The interface methods are called by the 9p protocol handler on demand.
-// The implementation is free to handle the read/write calls according
-// to its own logic.
-type File interface {
-	Read() ([]byte, error)
-	Write([]byte) error
-}
-
-// NopFile ignores all read/write requests
-type NopFile struct{}
-
-// Read returns emtpy file
-func (f *NopFile) Read() (data []byte, err error) {
-	return
-}
-
-// Write to file is ignored
-func (f *NopFile) Write([]byte) (err error) {
-	return
-}
-
-//----------------------------------------------------------------------
-
 // Entry in the filesystem
 type Entry struct {
 	ref      *ninep.Dir        // 9p reference
@@ -153,6 +129,9 @@ func (ns *Namespace) Get(path string) (*Entry, error) {
 			return nil, errNoDir
 		}
 		qid := ns.Walk(&curr.ref.Qid, label)
+		if qid == nil {
+			return nil, errNoFile
+		}
 		e, ok := ns.dict[qid.Path]
 		if !ok {
 			return nil, errNoFile
@@ -168,7 +147,9 @@ func (ns *Namespace) NewFile(path string, perm uint32, impl File) (err error) {
 	}
 	path = strings.TrimRight(path, "/")
 	idx := strings.LastIndex(path, "/")
-	return ns.new(path[:idx-1], ns.newEntry(path[idx+1:], ns.user, ns.group, perm, impl))
+	dir := path[:max(1, idx)]
+	name := path[idx+1:]
+	return ns.new(dir, ns.newEntry(name, ns.user, ns.group, perm, impl))
 }
 
 // NewDir creates a directory entry for the filesystem.
@@ -178,7 +159,9 @@ func (ns *Namespace) NewDir(path string, perm uint32) (err error) {
 	}
 	path = strings.TrimRight(path, "/")
 	idx := strings.LastIndex(path, "/")
-	return ns.new(path[:idx-1], ns.newEntry(path[idx+1:], ns.user, ns.group, perm, nil))
+	dir := path[:max(1, idx)]
+	name := path[idx+1:]
+	return ns.new(dir, ns.newEntry(name, ns.user, ns.group, perm, nil))
 }
 
 // New inserts an entry at a given directory path.
@@ -190,9 +173,6 @@ func (ns *Namespace) new(path string, entry *Entry) (err error) {
 	if !parent.IsDir() {
 		err = errNoDir
 		return
-	}
-	if parent.children == nil {
-		return errNoDir
 	}
 	parent.children[entry.ref.Name] = entry
 	ns.dict[entry.ref.Path] = entry

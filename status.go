@@ -21,6 +21,7 @@
 package srv9p
 
 import (
+	"fmt"
 	"sync/atomic"
 	"time"
 )
@@ -94,4 +95,18 @@ func (state *Status) Set(flag, num int) {
 // Get current state and repeat counter
 func (state *Status) Get() (int, int) {
 	return int(state.curr.Load()), int(state.repeat.Load())
+}
+
+// Trap critical failures (panic)
+func (state *Status) Trap(t time.Duration) {
+	s, _ := state.Get()
+	if r := recover(); r != nil {
+		fmt.Printf("EXCP: %v\n", r)
+		if s == StatOK {
+			state.Set(StatEXCP, 0)
+		}
+	} else if s == StatOK {
+		state.Set(StatUNK, 0)
+	}
+	time.Sleep(t)
 }

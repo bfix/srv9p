@@ -1,3 +1,5 @@
+//go:build host
+
 //----------------------------------------------------------------------
 // This file is part of srv9p.
 // Copyright (C) 2024-present Bernd Fix   >Y<
@@ -21,22 +23,29 @@
 package srv9p
 
 import (
+	"context"
+	"fmt"
 	"net"
 )
 
-// Device is a hardware abstraction
-type Device interface {
-	// LED on or off (if applicable)
-	LED(on bool)
+// HostDevice (for testing purposes)
+type HostDevice struct{}
 
-	// SetupListener returns a TCP listener on the given port.
-	// On embedded devices with WiFi connectivity the following steps are
-	// performed:
-	//    1. Connect to access point with given SSID and join with WPA2 password
-	//    2. Use DHCP to get a network address; query for given hostname. Assign
-	//       IP address if DHCP fails (if IP is a valid address).
-	//    3. Listen to the specified TCP port
-	// Devices with running TCP/IP stack can skip steps 1. and 2. in their
-	// implementation.
-	SetupListener(host, ip, ssid, passwd string, port uint16) (lst net.Listener, state int)
+// LED on or off (not applicable)
+func (dev *HostDevice) LED(on bool) {}
+
+// Initialize device
+func InitDevice() (dev Device) {
+	return new(HostDevice)
+}
+
+// SetupListener returns a TCP listener on the given port.
+func (dev *HostDevice) SetupListener(_, _, _, _ string, port uint16) (lst net.Listener, state int) {
+	ctx := context.Background()
+	cfg := new(net.ListenConfig)
+	lis, err := cfg.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, StatLISTEN1
+	}
+	return lis, StatOK
 }
