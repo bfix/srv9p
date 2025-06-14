@@ -35,7 +35,7 @@ type HostDevice struct{}
 func (dev *HostDevice) LED(on bool) {}
 
 // Initialize device
-func InitDevice() (dev Device) {
+func InitDevice(_ int) (dev Device) {
 	return new(HostDevice)
 }
 

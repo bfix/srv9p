@@ -39,7 +39,8 @@ import (
 
 // Raspberry Pico2 W  [RP2350]
 type Pico2WDevice struct {
-	ref *cyw43439.Device // reference to device
+	ref    *cyw43439.Device // reference to device
+	loglvl slog.Level       // logging level
 }
 
 // LED on or off (if applicable)
@@ -48,10 +49,11 @@ func (dev *Pico2WDevice) LED(on bool) {
 }
 
 // Initialize device
-func InitDevice() Device {
+func InitDevice(logLvl int) Device {
 	// access device
 	dev := new(Pico2WDevice)
 	dev.ref = cyw43439.NewPicoWDevice()
+	dev.loglvl = slog.Level(logLvl)
 	return dev
 }
 
@@ -59,7 +61,7 @@ func InitDevice() Device {
 // Can connect to WiFi hotspot (if applicable) first.
 // If DHCP fails, a static IP can be used.
 func (dev *Pico2WDevice) SetupListener(host, ip, ssid, passwd string, port uint16) (lst net.Listener, state int) {
-	var logger *slog.Logger = slog.New(slog.NewTextHandler(machine.Serial, &slog.HandlerOptions{Level: slog.LevelDebug - 1}))
+	var logger *slog.Logger = slog.New(slog.NewTextHandler(machine.Serial, &slog.HandlerOptions{Level: dev.loglvl}))
 	time.Sleep(2 * time.Second)
 
 	var stack *stacks.PortStack

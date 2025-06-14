@@ -48,7 +48,7 @@ var (
 // run 9p server
 func main() {
 	// prepare device
-	dev := srv9p.InitDevice()
+	dev := srv9p.InitDevice(0)
 	state := srv9p.NewStatus(dev)
 	defer state.Trap(24 * time.Hour)
 	state.Set(srv9p.StatOK, 0)
